@@ -20,8 +20,14 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
             "External"
 
         intiva = softwareSystem "Intiva Platform" \
-            "Centralised healthcare management platform for clinics and care facilities." {
+            "Application that serves a vehicle loan simulator using relevant variables like the capital, rate and time." {
 
+            landingPage = container "Intiva Static Website" \
+                "Static website that provides key information about the vehicle loan simulator of Intiva" \
+                "HTML5, CSS, JavaScript" {
+                
+            } 
+               
             mobileApp = container "Intiva Mobile Application" \
                 "Cross-platform application for vehicle loans simulation." \
                 "Dart, Flutter" \
@@ -88,31 +94,32 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
 
             webApplication = container "Web Application" \
                 "Serves the platform's web application content." \
-                "JavaScript, React.js" {
-                staticContent = component "Static Content" "Serves React PWA files." "JavaScript, React.js"
+                "TypeScript, React.js" {
+                staticContent = component "Static Content" "Serves React PWA files." "TypeScript, React.js"
             }
 
             frontendApp = container "Frontend Application" \
                 "Allows the management of vehicle information" \
-                "JavaScript, React.js" "Frontend" {
+                "TypeScript, React.js" \
+                "Frontend" {
                 frontIamContext = component "IAM UI" \
                     "Displays the sign-in and sign-up forms." \
-                    "JavaScript, React.js"
+                    "TypeScript, React.js"
 
                 frontProfilesContext = component "Profiles UI" \
                     "Displays user's personal information." \
-                    "JavaScript, React.js"
+                    "TypeScript, React.js"
 
                 frontVehiclesContext = component "Vehicles UI" \
                     "Displays available vehicles and allows registration of new vehicles." \
-                    "JavaScript, React.js"
+                    "TypeScript, React.js"
 
                 frontShared = component "Shared" \
                     "Handles common utilities and components across the contexts." \
-                    "JavaScript, React.js"
+                    "TypeScript, React.js"
             }
         }
-
+        
         client         -> intiva         "Simulates vehicle loans"
         client         -> mobileApp      "Simulates vehicle loans"
         admin          -> webApplication "Visits Intiva using"                        "HTTPS"
@@ -166,10 +173,55 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
         frontProfilesContext   -> frontShared   "Extends base api and endpoint and components"
         frontVehiclesContext   -> backendApi    "Requests and registers vehicles"         "JSON/HTTPS"
         frontVehiclesContext   -> frontShared   "Extends base api and endpoint and components"
+        
+        deploymentEnvironment "Production" {
+
+            deploymentNode "Vercel" "Cloud platform for hosting and delivering the public website and web application." "Vercel Edge Network" {
+                deploymentNode "Landing Page" "Public static website delivered to visitors." "Vercel Edge Network" {
+                    containerInstance landingPage
+                }
+
+                deploymentNode "Web Application" "Static Angular application files served to the user's browser." "Vercel Edge Network" {
+                    containerInstance webApplication
+                }
+            }
+
+            deploymentNode "Web Browser" "Browser installed on the end-user device." "Chrome / Safari / Edge / Firefox" {
+                deploymentNode "Intiva Frontend Application" "Client-side application executed in the user's browser." "Web Browser" {
+                    containerInstance frontendApp
+                }
+            }
+            
+
+            deploymentNode "Azure App Service" "Cloud platform where the backend service is deployed and executed." "Azure App Service / Docker" {
+                deploymentNode "Intiva Cloud API" "Backend API service executed in Render." "Azure App Service / Docker" {
+                    containerInstance backendApi
+                }
+            }
+
+            deploymentNode "MongoDB Atlas" "Managed cloud database service used by the backend." "MongoDB Atlas Cluster" {
+                deploymentNode "Intiva NoSqlDatabase" "Managed NoSQL database used by Restock." "MongoDB Atlas Cluster" {
+                    containerInstance database
+                }
+            }
+
+            deploymentNode "Firebase App Distribution" "End-user smartphone or tablet used to access the mobile app." "Firebase App Distribution" {
+                deploymentNode "Intiva Mobile Application" "Cross-platform mobile app deployed on cloud in FireBase App Distribution." "Firebase App Distribution" {
+                    containerInstance mobileApp
+                }
+
+                deploymentNode "Mobile Local Database" "Local database stored on the mobile device." "SQLite on-device storage" {
+                    containerInstance localDatabase
+                }
+            }
+        }   
+    }
+
+    configuration {
+        Scope softwaresystem
     }
 
     views {
-
         systemContext intiva "SystemContext" {
             include *
             autoLayout lr
@@ -180,6 +232,12 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
             include *
             autoLayout lr
             title "Intiva Platform — Software Architecture Container Diagram"
+        }
+        
+        deployment intiva "Production" "ProductionDeployment" {
+            include *
+            autoLayout lr 100 100 90
+            title "Intiva Platform - Software Architecture Deployment Diagram"
         }
 
         component mobileApp "MobileComponent" {
