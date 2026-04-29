@@ -4,13 +4,6 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
         client = person "Client" \
             "Person that seeks information about vehicle loans (bank, efective rate)."
 
-        admin = person "Administration" \
-            "Company worker that manages the vehicle and loans information."
-
-        cloudinary = softwareSystem "Cloudinary" \
-            "Stores and delivers user and resident avatar images via CDN with on-the-fly transformation support." \
-            "External"
-
         twilio = softwareSystem "Twilio" \
             "Delivers outbound email notifications to clients with its simulations." \
             "External"
@@ -22,12 +15,6 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
         intiva = softwareSystem "Intiva Platform" \
             "Application that serves a vehicle loan simulator using relevant variables like the capital, rate and time." {
 
-            landingPage = container "Intiva Static Website" \
-                "Static website that provides key information about the vehicle loan simulator of Intiva" \
-                "HTML5, CSS, JavaScript" {
-                
-            } 
-               
             mobileApp = container "Intiva Mobile Application" \
                 "Cross-platform application for vehicle loans simulation." \
                 "Dart, Flutter" \
@@ -91,58 +78,21 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
                 "Stores app data locally on the mobile device." \
                 "SQLite" \
                 "Database"
-
-            webApplication = container "Web Application" \
-                "Serves the platform's web application content." \
-                "TypeScript, React.js" {
-                staticContent = component "Static Content" "Serves React PWA files." "TypeScript, React.js"
-            }
-
-            frontendApp = container "Frontend Application" \
-                "Allows the management of vehicle information" \
-                "TypeScript, React.js" \
-                "Frontend" {
-                frontIamContext = component "IAM UI" \
-                    "Displays the sign-in and sign-up forms." \
-                    "TypeScript, React.js"
-
-                frontProfilesContext = component "Profiles UI" \
-                    "Displays user's personal information." \
-                    "TypeScript, React.js"
-
-                frontVehiclesContext = component "Vehicles UI" \
-                    "Displays available vehicles and allows registration of new vehicles." \
-                    "TypeScript, React.js"
-
-                frontShared = component "Shared" \
-                    "Handles common utilities and components across the contexts." \
-                    "TypeScript, React.js"
-            }
         }
         
         client         -> intiva         "Simulates vehicle loans"
         client         -> mobileApp      "Simulates vehicle loans"
-        admin          -> webApplication "Visits Intiva using"                        "HTTPS"
-        admin          -> staticContent  "Visits Intiva using"                        "HTTPS"
-        admin          -> intiva         "Manages vehicle and loans information"
-        admin          -> frontendApp    "Manages vehicle and loan information"       "HTTPS"
-        intiva         -> cloudinary     "Uploads and retrieves media assets"         "HTTPS"
         intiva         -> twilio         "Sends SMS and email notifications"          "HTTPS"
         intiva         -> oauth2         "Delegates authentication"                   "HTTPS/OIDC"
         mobileApp      -> backendApi     "Reads from and writes loan simulation data" "JSON/HTTPS"
         mobileApp      -> localDatabase  "Caches and retrieves simulation data"
         backendApi     -> database       "Reads from and writes to"                   "MongoDB Wire Protocol"
-        backendApi     -> cloudinary     "Uploads and retrieves media"                "HTTPS"
         backendApi     -> twilio         "Sends notifications via"                    "HTTPS"
         backendApi     -> oauth2         "Validates tokens with"                      "HTTPS/OIDC"
-        frontendApp    -> backendApi     "Reads from and writes loan management data" "JSON/HTTPS"
-        webApplication -> frontendApp    "Delivers content to the user's web browser"
-        staticContent  -> frontendApp    "Delivers content to the user's web browser" "HTTPS"
 
         apiIamContext           -> oauth2        "Requests authorization from Google"  "HTTPS"
         apiIamContext           -> apiShared     "Uses shared utilities"
         apiIamContext           -> database      "Stores user data"                    "MongoDB Wire Protocol"
-        apiVehiclesContext      -> cloudinary    "Uploads and retrieves vehicle media" "JSON/HTTPS"
         apiVehiclesContext      -> apiIamContext "Verifies JWT and ensures the roles of the user"
         apiVehiclesContext      -> database      "Stores vehicle data"                 "MongoDB Wire Protocol"
         apiVehiclesContext      -> apiShared     "Uses shared utilities"
@@ -166,32 +116,7 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
         mobileAnalyticsContext  -> mobileShared  "Extends base api and endpoint and widget utilities"
         mobileAnalyticsContext  -> localDatabase "Caches registered loan simulations"
 
-        frontIamContext        -> backendApi    "Authenticates admin users"              "JSON/HTTPS"
-        frontIamContext        -> frontShared   "Extends base api and endpoint and components"
-        frontIamContext        -> oauth2        "Redirects to authorization page from Google"      "HTTPS"
-        frontProfilesContext   -> backendApi    "Requests personal information"           "JSON/HTTPS"
-        frontProfilesContext   -> frontShared   "Extends base api and endpoint and components"
-        frontVehiclesContext   -> backendApi    "Requests and registers vehicles"         "JSON/HTTPS"
-        frontVehiclesContext   -> frontShared   "Extends base api and endpoint and components"
-        
         deploymentEnvironment "Production" {
-
-            deploymentNode "Vercel" "Cloud platform for hosting and delivering the public website and web application." "Vercel Edge Network" {
-                deploymentNode "Landing Page" "Public static website delivered to visitors." "Vercel Edge Network" {
-                    containerInstance landingPage
-                }
-
-                deploymentNode "Web Application" "Static Angular application files served to the user's browser." "Vercel Edge Network" {
-                    containerInstance webApplication
-                }
-            }
-
-            deploymentNode "Web Browser" "Browser installed on the end-user device." "Chrome / Safari / Edge / Firefox" {
-                deploymentNode "Intiva Frontend Application" "Client-side application executed in the user's browser." "Web Browser" {
-                    containerInstance frontendApp
-                }
-            }
-            
 
             deploymentNode "Azure App Service" "Cloud platform where the backend service is deployed and executed." "Azure App Service / Docker" {
                 deploymentNode "Intiva Cloud API" "Backend API service executed in Render." "Azure App Service / Docker" {
@@ -244,18 +169,6 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
             include *
             autoLayout lr
             title "Intiva Platform — Software Architecture Mobile App Component Diagram"
-        }
-
-        component webApplication "WebAppComponent" {
-            include *
-            autoLayout lr
-            title "Intiva Platform — Software Architecture Web App Component Diagram"
-        }
-
-        component frontendApp "FrontendAppComponent" {
-            include *
-            autoLayout lr
-            title "Intiva Platform — Software Architecture Frontend App Component Diagram"
         }
 
         component backendApi "CloudAPIComponent" {
