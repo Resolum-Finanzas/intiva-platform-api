@@ -1,0 +1,676 @@
+@startuml Intiva_Analytics_BoundedContext
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam defaultFontName Monospaced
+skinparam linetype ortho
+left to right direction
+
+
+package "analytics" {
+
+
+  package "interfaces" {
+
+    package "rest" {
+
+      class LoanSimulationController {
+        ' Endpoints REST de simulación de crédito
+        +createSimulation(resource: CreateLoanSimulationResource): ResponseEntity<LoanSimulationResource>
+        +getSimulationById(simulationId: String): ResponseEntity<LoanSimulationResource>
+        +getAllSimulationsByUser(userId: Long): ResponseEntity<List<SimulationSummaryResource>>
+        +calculateSchedule(simulationId: String): ResponseEntity<PaymentScheduleResource>
+        +deleteSimulation(simulationId: String): ResponseEntity<Void>
+      }
+
+      package "resources" {
+
+        class CreateLoanSimulationResource {
+          ' Datos de entrada del simulador (pantalla Simulator)
+          +vehicleId: String
+          +vehiclePrice: Double
+          +initialPaymentPercentage: Double
+          +bankEntity: String
+          +teaPercentage: Double
+          +termMonths: Integer
+          +balloonPercentage: Double
+          +vehicleRiskLevel: String
+          +includeDesgravamen: Boolean
+          +gracePeriodType: String
+          +gracePeriodDurationMonths: Integer
+          +startDate: LocalDate
+        }
+
+        class LoanSimulationResource {
+          ' Datos de salida completos con cronograma
+          +id: String
+          +vehicleId: String
+          +vehicleName: String
+          +vehiclePrice: Double
+          +financedAmount: Double
+          +bankEntity: String
+          +teaPercentage: Double
+          +tceaPercentage: Double
+          +termMonths: Integer
+          +balloonPaymentAmount: Double
+          +van: Double
+          +tir: Double
+          +graceInterest: Double
+          +createdAt: LocalDateTime
+          +schedule: PaymentScheduleResource
+        }
+
+        class PaymentScheduleResource {
+          ' Cabecera del cronograma (pantalla Plan de Pagos)
+          +totalInterest: Double
+          +totalAmortization: Double
+          +totalDesgravamen: Double
+          +totalVehicularInsurance: Double
+          +totalPayment: Double
+          +graceInterest: Double
+          +periods: List<PaymentPeriodResource>
+        }
+
+        class PaymentPeriodResource {
+          ' Detalle de cada fila del cronograma
+          +periodNumber: Integer
+          +paymentDate: LocalDate
+          +initialBalance: Double
+          +interest: Double
+          +amortization: Double
+          +desgravamenInsurance: Double
+          +vehicularInsurance: Double
+          +totalPayment: Double
+          +finalBalance: Double
+          +netFlow: Double
+          +isBalloon: Boolean
+          +isGracePeriod: Boolean
+        }
+
+        class SimulationSummaryResource {
+          ' Resumen para listado de simulaciones del usuario
+          +id: String
+          +vehicleName: String
+          +vehiclePrice: Double
+          +financedAmount: Double
+          +teaPercentage: Double
+          +termMonths: Integer
+          +estimatedMonthlyPayment: Double
+          +createdAt: LocalDateTime
+        }
+
+        class UpdateLoanSimulationResource {
+          +teaPercentage: Double
+          +termMonths: Integer
+          +balloonPercentage: Double
+          +vehicleRiskLevel: String
+          +includeDesgravamen: Boolean
+          +gracePeriodType: String
+          +gracePeriodDurationMonths: Integer
+        }
+      }
+
+      package "transform" {
+        ' Assemblers: convierten resource → command y entity → resource
+        class CreateLoanSimulationCommandFromResourceAssembler
+        class UpdateSimulationCommandFromResourceAssembler
+        class LoanSimulationResourceFromEntityAssembler
+        class PaymentScheduleResourceFromEntityAssembler
+        class SimulationSummaryResourceFromEntityAssembler
+      }
+    }
+
+    package "acl" {
+      ' Fachada expuesta a otros bounded contexts (ej: Vehicles)
+      interface AnalyticsContextFacade {
+        +createSimulationForUser(userId: Long, vehicleId: String, params: LoanParametersData): String
+        +getSimulationById(simulationId: String): Optional<LoanSimulationData>
+        +getSimulationsByUser(userId: Long): List<LoanSimulationData>
+      }
+    }
+  }
+
+
+  ' ─────────────────────────────────────────────
+  '  CAPA DE APLICACIÓN
+  ' ─────────────────────────────────────────────
+  package "application" {
+
+    package "internal" {
+
+      package "commandservices" {
+        class LoanSimulationCommandServiceImpl {
+          ' Orquesta lógica de aplicación para comandos
+          -loanSimulationRepository: LoanSimulationRepository
+          -frenchMethodService: FrenchMethodCalculationService
+          -financialMetricsService: FinancialMetricsCalculationService
+          -insuranceService: InsuranceCalculationService
+          -bankRateRepository: BankRateConfigurationRepository
+          -communicationService: CommunicationService
+          +handle(command: CreateLoanSimulationCommand): Optional<LoanSimulation>
+          +handle(command: CalculatePaymentScheduleCommand): Optional<LoanSimulation>
+          +handle(command: UpdateSimulationCommand): Optional<LoanSimulation>
+          +handle(command: DeleteLoanSimulationCommand): void
+        }
+      }
+
+      package "queryservices" {
+        class LoanSimulationQueryServiceImpl {
+          -loanSimulationRepository: LoanSimulationRepository
+          -bankRateRepository: BankRateConfigurationRepository
+          +handle(query: GetSimulationByIdQuery): Optional<LoanSimulation>
+          +handle(query: GetAllSimulationsByUserQuery): List<LoanSimulation>
+          +handle(query: GetSimulationsByVehicleQuery): List<LoanSimulation>
+          +handle(query: GetBankRateConfigByEntityQuery): Optional<BankRateConfiguration>
+        }
+      }
+
+      package "outboundservices" {
+        ' Comunicación ACL hacia Communication bounded context
+        class CommunicationService {
+          +sendSimulationReportByEmail(simulationId: String, recipientEmail: String): void
+          +sendPaymentReminderNotification(simulationId: String, userId: Long): void
+        }
+      }
+    }
+
+    package "acl" {
+      ' Implementación de la fachada expuesta
+      class AnalyticsContextFacadeImpl
+      ' Adaptador ACL hacia IAM bounded context (verifica JWT y userId)
+      class IamContextAclService {
+        +fetchUserIdByToken(token: String): Long
+        +verifyUserExists(userId: Long): Boolean
+        +fetchUserEmailByUserId(userId: Long): String
+      }
+    }
+  }
+
+
+  ' ─────────────────────────────────────────────
+  '  CAPA DE DOMINIO — MODELO
+  ' ─────────────────────────────────────────────
+  package "domain" {
+
+    package "model" {
+
+      ' ── AGGREGATE ROOT ──────────────────────
+      package "aggregates" {
+
+        class LoanSimulation <<aggregate root>> {
+          ' Raíz del agregado: encapsula todo el estado de una simulación
+          -id: SimulationId
+          -userId: Long
+          -vehicleId: String
+          -loanParameters: LoanParameters
+          -balloonConfig: BalloonPayment
+          -gracePeriodConfig: GracePeriod
+          -insuranceConfig: InsuranceConfig
+          -schedule: PaymentSchedule
+          -financialMetrics: FinancialMetrics
+          -status: SimulationStatus
+          -createdAt: LocalDateTime
+          -updatedAt: LocalDateTime
+          ' Métodos de dominio
+          +initializeSimulation(params: LoanParameters, balloon: BalloonPayment, grace: GracePeriod, insurance: InsuranceConfig): void
+          +attachSchedule(schedule: PaymentSchedule): void
+          +attachFinancialMetrics(metrics: FinancialMetrics): void
+          +updateParameters(params: LoanParameters): void
+          +markAsCalculated(): void
+          +isCalculated(): Boolean
+          +getEffectiveFinancedAmount(): MoneyAmount
+          +getMonthlyFrenchPayment(): MoneyAmount
+        }
+      }
+
+      ' ── ENTITIES ────────────────────────────
+      package "entities" {
+
+        class PaymentSchedule <<entity>> {
+          ' Cronograma completo de pagos del crédito
+          -id: String
+          -periods: List<PaymentPeriod>
+          -totalInterest: MoneyAmount
+          -totalAmortization: MoneyAmount
+          -totalDesgravamen: MoneyAmount
+          -totalVehicularInsurance: MoneyAmount
+          -graceInterest: MoneyAmount
+          +addPeriod(period: PaymentPeriod): void
+          +getPeriodByNumber(n: Integer): Optional<PaymentPeriod>
+          +getBalloonPeriod(): Optional<PaymentPeriod>
+          +getTotalPayment(): MoneyAmount
+          +getNetFlows(): List<Double>
+          +getPeriodCount(): Integer
+        }
+
+        class PaymentPeriod <<entity>> {
+          ' Fila individual del cronograma (Período N)
+          -periodNumber: Integer
+          -paymentDate: LocalDate
+          -detail: PeriodDetail
+          -isBalloon: Boolean
+          -isGracePeriod: Boolean
+          -gracePeriodType: GracePeriodType
+          +getTotalPayment(): MoneyAmount
+          +getNetFlow(): MoneyAmount
+          +isLastRegularPeriod(): Boolean
+        }
+
+        class BankRateConfiguration <<entity>> {
+          ' Parámetros institucionales del banco (pantalla Configuración)
+          -id: String
+          -bankEntity: BankEntity
+          -currency: Currency
+          -desgravamenMonthlyRate: Double
+          -vehicleInsuranceRates: List<VehicleInsuranceRate>
+          -interestRateRanges: List<InterestRateRange>
+          -effectiveDate: LocalDate
+          +getInsuranceRateByRiskLevel(level: RiskLevel): VehicleInsuranceRate
+          +getInterestRangeByAmount(amount: Double): Optional<InterestRateRange>
+          +getSuggestedTeaRangeText(amount: Double): String
+          +getDesgravamenAnnualRate(): Double
+        }
+      }
+
+      ' ── VALUE OBJECTS ───────────────────────
+      package "valueobjects" {
+
+        class SimulationId <<value object>> {
+          ' Identificador único de la simulación (UUID)
+          -value: String
+          +SimulationId()
+          +SimulationId(value: String)
+          +getValue(): String
+        }
+
+        class LoanParameters <<value object>> {
+          ' Parámetros de entrada del crédito
+          -vehiclePrice: MoneyAmount
+          -initialPaymentPercentage: Double
+          -initialPaymentAmount: MoneyAmount
+          -financedAmount: MoneyAmount
+          -tea: InterestRate
+          -termMonths: Integer
+          -paymentFrequency: PaymentFrequency
+          -bankEntity: BankEntity
+          -startDate: LocalDate
+          +getMonthlyEffectiveRate(): Double
+          +getEffectiveTermMonths(): Integer
+          +getFinancingDays(): Integer
+        }
+
+        class BalloonPayment <<value object>> {
+          ' Cuota Balón: pago final elevado (Compra Inteligente)
+          -percentage: Double
+          -futureValue: MoneyAmount
+          -presentValue: MoneyAmount
+          +getBalloonFutureAmount(): Double
+          +getBalloonPresentValue(monthlyRate: Double, termMonths: Integer): Double
+          +getAmortizableCapital(vehiclePrice: Double): Double
+        }
+
+        class GracePeriod <<value object>> {
+          ' Período de gracia parcial o total
+          -type: GracePeriodType
+          -durationMonths: Integer
+          +isActive(): Boolean
+          +isPartial(): Boolean
+          +isTotal(): Boolean
+          +getDurationMonths(): Integer
+        }
+
+        class InsuranceConfig <<value object>> {
+          ' Configuración de seguros del crédito
+          -vehicleRiskLevel: RiskLevel
+          -vehicleInsuranceAnnualRate: Double
+          -includeDesgravamen: Boolean
+          -desgravamenMonthlyRate: Double
+          +getMonthlyVehicularFactor(days: Integer): Double
+          +getMonthlyDesgravamenFactor(days: Integer): Double
+          +hasVehicularInsurance(): Boolean
+        }
+
+        class MoneyAmount <<value object>> {
+          ' Monto monetario con moneda
+          -amount: Double
+          -currency: Currency
+          +add(other: MoneyAmount): MoneyAmount
+          +subtract(other: MoneyAmount): MoneyAmount
+          +multiply(factor: Double): MoneyAmount
+          +round(decimals: Integer): MoneyAmount
+          +isPositive(): Boolean
+          +getValue(): Double
+        }
+
+        class InterestRate <<value object>> {
+          ' Tasa de interés tipificada (TEA, TEM, TCEA)
+          -value: Double
+          -type: RateType
+          +toMonthlyEffective(): Double
+          +toAnnualEffective(): Double
+          +toPercentage(): Double
+        }
+
+        class FinancialMetrics <<value object>> {
+          ' Indicadores financieros calculados (cabecera Plan de Pagos)
+          -tea: InterestRate
+          -tcea: InterestRate
+          -van: MoneyAmount
+          -tir: Double
+          -totalInterestPaid: MoneyAmount
+          -totalAmortization: MoneyAmount
+          -totalDesgravamenPaid: MoneyAmount
+          -totalVehicularPaid: MoneyAmount
+          -reductionVsConventional: Double
+          +isViableInvestment(): Boolean
+          +getVanValue(): Double
+          +getTirPercentage(): Double
+        }
+
+        class PeriodDetail <<value object>> {
+          ' Detalle financiero de un período (fila del cronograma)
+          -initialBalance: MoneyAmount
+          -interest: MoneyAmount
+          -amortization: MoneyAmount
+          -frenchBasePayment: MoneyAmount
+          -desgravamenInsurance: MoneyAmount
+          -vehicularInsurance: MoneyAmount
+          -totalPayment: MoneyAmount
+          -finalBalance: MoneyAmount
+          -netFlow: MoneyAmount
+        }
+
+        class VehicleInsuranceRate <<value object>> {
+          ' Tasa del seguro vehicular por nivel de riesgo
+          -riskLevel: RiskLevel
+          -annualRate: Double
+          +getAdjustedFactor(days: Integer): Double
+          +getMonthlyEquivalent(): Double
+        }
+
+        class InterestRateRange <<value object>> {
+          ' Rango de tasas de interés según monto financiado (BCP)
+          -minAmount: Double
+          -maxAmount: Double
+          -minTeaRate: Double
+          -maxTeaRate: Double
+          +containsAmount(amount: Double): Boolean
+          +getRangeDescription(): String
+          +getMidpointRate(): Double
+        }
+
+        ' ── ENUMERACIONES ───────────────────
+        enum SimulationStatus {
+          DRAFT
+          CALCULATED
+          UPDATED
+        }
+
+        enum GracePeriodType {
+          NONE
+          PARTIAL
+          TOTAL
+        }
+
+        enum RiskLevel {
+          LOW_RISK_1
+          LOW_RISK_2
+          MEDIUM_RISK
+          HIGH_RISK
+          PICKUP
+          CHINESE_INDIAN
+          L8
+          OTHER
+        }
+
+        enum PaymentFrequency {
+          MONTHLY
+          QUARTERLY
+          BIANNUAL
+          ANNUAL
+        }
+
+        enum BankEntity {
+          BCP
+          BBVA
+          INTERBANK
+        }
+
+        enum Currency {
+          USD
+          PEN
+        }
+
+        enum RateType {
+          TEA
+          TEM
+          TCEA
+          NOMINAL_ANNUAL
+        }
+      }
+
+      ' ── COMMANDS ────────────────────────────
+      package "commands" {
+
+        class CreateLoanSimulationCommand {
+          +userId: Long
+          +vehicleId: String
+          +vehiclePrice: Double
+          +initialPaymentPercentage: Double
+          +bankEntity: String
+          +teaPercentage: Double
+          +termMonths: Integer
+          +balloonPercentage: Double
+          +vehicleRiskLevel: String
+          +includeDesgravamen: Boolean
+          +gracePeriodType: String
+          +gracePeriodDurationMonths: Integer
+          +startDate: LocalDate
+        }
+
+        class CalculatePaymentScheduleCommand {
+          +simulationId: String
+          +userId: Long
+        }
+
+        class UpdateSimulationCommand {
+          +simulationId: String
+          +userId: Long
+          +teaPercentage: Double
+          +termMonths: Integer
+          +balloonPercentage: Double
+          +vehicleRiskLevel: String
+          +includeDesgravamen: Boolean
+          +gracePeriodType: String
+          +gracePeriodDurationMonths: Integer
+        }
+
+        class DeleteLoanSimulationCommand {
+          +simulationId: String
+          +userId: Long
+        }
+      }
+
+      ' ── QUERIES ─────────────────────────────
+      package "queries" {
+
+        class GetSimulationByIdQuery {
+          +simulationId: String
+          +userId: Long
+        }
+
+        class GetAllSimulationsByUserQuery {
+          +userId: Long
+        }
+
+        class GetSimulationsByVehicleQuery {
+          +vehicleId: String
+        }
+
+        class GetBankRateConfigByEntityQuery {
+          +bankEntity: String
+        }
+      }
+    }
+
+
+    ' ─────────────────────────────────────────────
+    '  SERVICIOS DE DOMINIO
+    ' ─────────────────────────────────────────────
+    package "domain.services" {
+
+      interface LoanSimulationCommandService {
+        +handle(command: CreateLoanSimulationCommand): Optional<LoanSimulation>
+        +handle(command: CalculatePaymentScheduleCommand): Optional<LoanSimulation>
+        +handle(command: UpdateSimulationCommand): Optional<LoanSimulation>
+        +handle(command: DeleteLoanSimulationCommand): void
+      }
+
+      interface LoanSimulationQueryService {
+        +handle(query: GetSimulationByIdQuery): Optional<LoanSimulation>
+        +handle(query: GetAllSimulationsByUserQuery): List<LoanSimulation>
+        +handle(query: GetSimulationsByVehicleQuery): List<LoanSimulation>
+        +handle(query: GetBankRateConfigByEntityQuery): Optional<BankRateConfiguration>
+      }
+
+      class FrenchMethodCalculationService <<domain service>> {
+        ' Implementa el Método Francés Vencido Ordinario
+        ' Fórmula: C = P × [r(1+r)^n / ((1+r)^n - 1)]
+        +calculateMonthlyPayment(principal: Double, monthlyRate: Double, n: Integer): Double
+        +calculateAmortizableCapital(vehiclePrice: Double, balloonPV: Double): Double
+        +generateFullSchedule(simulation: LoanSimulation, config: BankRateConfiguration): PaymentSchedule
+        +computeGracePeriodPartial(balance: Double, tem: Double): PeriodDetail
+        +computeGracePeriodTotal(balance: Double, tem: Double, months: Integer): Double
+        +computeRegularPeriod(prevBalance: Double, interest: Double, amortization: Double, insurance: InsuranceConfig, vehiclePrice: Double): PeriodDetail
+        +computeBalloonPeriod(balance: Double, interest: Double, insurance: InsuranceConfig, vehiclePrice: Double): PeriodDetail
+      }
+
+      class FinancialMetricsCalculationService <<domain service>> {
+        ' Calcula TCEA, VAN y TIR sobre los flujos netos del cronograma
+        ' VAN = Σ Ft / (1+r)^t
+        ' TIR: tasa que hace VAN = 0
+        ' TCEA = (1+i')^k - 1
+        +calculateTcea(netFlows: List<Double>, financedAmount: Double): Double
+        +calculateVan(netFlows: List<Double>, discountRate: Double): Double
+        +calculateTir(netFlows: List<Double>): Double
+        +convertTeaToTem(tea: Double): Double
+        +buildFinancialMetrics(schedule: PaymentSchedule, tea: Double, discountRate: Double): FinancialMetrics
+        +estimateReductionVsConventional(balloon: BalloonPayment, frenchPayment: Double): Double
+      }
+
+      class InsuranceCalculationService <<domain service>> {
+        ' Calcula seguros de desgravamen y vehicular por período
+        ' S_d = Saldo × d (d = TDA × días / 360)
+        +calculateDesgravamenAmount(balance: Double, monthlyRate: Double, days: Integer): Double
+        +calculateVehicularAmount(vehiclePrice: Double, annualRate: Double, days: Integer): Double
+        +getAdjustedDesgravamenFactor(annualRate: Double, days: Integer): Double
+        +getAdjustedVehicularFactor(annualRate: Double, days: Integer): Double
+      }
+    }
+
+
+    ' ─────────────────────────────────────────────
+    '  CAPA DE INFRAESTRUCTURA
+    ' ─────────────────────────────────────────────
+    package "infrastructure" {
+
+      package "persistence.mongodb.repositories" {
+
+        interface LoanSimulationRepository {
+          ' Repositorio principal del agregado (MongoDB)
+          +findById(id: String): Optional<LoanSimulation>
+          +findByUserId(userId: Long): List<LoanSimulation>
+          +findByVehicleId(vehicleId: String): List<LoanSimulation>
+          +findByUserIdAndStatus(userId: Long, status: SimulationStatus): List<LoanSimulation>
+          +save(simulation: LoanSimulation): LoanSimulation
+          +deleteById(id: String): void
+          +existsByIdAndUserId(id: String, userId: Long): Boolean
+        }
+
+        interface BankRateConfigurationRepository {
+          ' Repositorio de configuraciones de tasas por banco
+          +findByBankEntity(bankEntity: String): Optional<BankRateConfiguration>
+          +findAll(): List<BankRateConfiguration>
+          +save(config: BankRateConfiguration): BankRateConfiguration
+        }
+      }
+    }
+  }
+
+  ' ============================================================
+  ' RELACIONES
+  ' ============================================================
+
+  ' ── Interfaces → Application ────────────────
+  LoanSimulationController --> LoanSimulationCommandServiceImpl : uses
+  LoanSimulationController --> LoanSimulationQueryServiceImpl  : uses
+
+  ' ── Assemblers ──────────────────────────────
+  LoanSimulationController --> CreateLoanSimulationCommandFromResourceAssembler : uses
+  LoanSimulationController --> LoanSimulationResourceFromEntityAssembler        : uses
+  LoanSimulationController --> SimulationSummaryResourceFromEntityAssembler     : uses
+  CreateLoanSimulationCommandFromResourceAssembler --> CreateLoanSimulationCommand : creates
+  LoanSimulationResourceFromEntityAssembler        --> LoanSimulationResource       : creates
+
+  ' ── Application → Domain Services ──────────
+  LoanSimulationCommandServiceImpl ..|> LoanSimulationCommandService
+  LoanSimulationQueryServiceImpl   ..|> LoanSimulationQueryService
+
+  ' ── Application → Domain Services (cálculo) ─
+  LoanSimulationCommandServiceImpl --> FrenchMethodCalculationService     : delegates to
+  LoanSimulationCommandServiceImpl --> FinancialMetricsCalculationService : delegates to
+  LoanSimulationCommandServiceImpl --> InsuranceCalculationService        : delegates to
+
+  ' ── Application → Repositories ──────────────
+  LoanSimulationCommandServiceImpl --> LoanSimulationRepository         : persists via
+  LoanSimulationCommandServiceImpl --> BankRateConfigurationRepository  : reads config via
+  LoanSimulationQueryServiceImpl   --> LoanSimulationRepository         : queries via
+  LoanSimulationQueryServiceImpl   --> BankRateConfigurationRepository  : queries via
+
+  ' ── Application → Outbound ──────────────────
+  LoanSimulationCommandServiceImpl --> CommunicationService : notifies via (ACL)
+
+  ' ── ACL ─────────────────────────────────────
+  AnalyticsContextFacadeImpl ..|> AnalyticsContextFacade
+  AnalyticsContextFacadeImpl --> LoanSimulationCommandServiceImpl : delegates to
+  AnalyticsContextFacadeImpl --> LoanSimulationQueryServiceImpl   : delegates to
+
+  ' ── Aggregate Composition ───────────────────
+  LoanSimulation *-- "1" SimulationId       : identified by
+  LoanSimulation *-- "1" LoanParameters     : configured with
+  LoanSimulation *-- "1" BalloonPayment     : includes
+  LoanSimulation *-- "1" GracePeriod        : may include
+  LoanSimulation *-- "1" InsuranceConfig    : configured with
+  LoanSimulation *-- "0..1" PaymentSchedule : generates
+  LoanSimulation *-- "0..1" FinancialMetrics: computes
+
+  PaymentSchedule *-- "1..*" PaymentPeriod  : contains
+  PaymentPeriod   *-- "1"    PeriodDetail   : described by
+
+  ' ── Value Object Compositions ───────────────
+  LoanParameters  *-- "1" MoneyAmount       : vehiclePrice, initialPayment, financedAmount
+  LoanParameters  *-- "1" InterestRate      : tea
+  BalloonPayment  *-- "2" MoneyAmount       : futureValue, presentValue
+  FinancialMetrics *-- "1" InterestRate     : tcea
+  FinancialMetrics *-- "1" MoneyAmount      : van, totals
+  PeriodDetail    *-- "7" MoneyAmount       : balances, payments
+  InsuranceConfig  --> RiskLevel            : uses
+  VehicleInsuranceRate --> RiskLevel        : classifies by
+  InterestRate    --> RateType              : typed as
+
+  ' ── BankRateConfiguration ───────────────────
+  BankRateConfiguration *-- "1..*" VehicleInsuranceRate  : contains
+  BankRateConfiguration *-- "1..*" InterestRateRange     : contains
+  BankRateConfiguration --> BankEntity                    : belongs to
+  BankRateConfiguration --> Currency                      : configured in
+
+  ' ── Enum Usages ─────────────────────────────
+  LoanSimulation      --> SimulationStatus
+  LoanParameters      --> PaymentFrequency
+  LoanParameters      --> BankEntity
+  GracePeriod         --> GracePeriodType
+  PaymentPeriod       --> GracePeriodType
+  MoneyAmount         --> Currency
+
+}
+
+@enduml

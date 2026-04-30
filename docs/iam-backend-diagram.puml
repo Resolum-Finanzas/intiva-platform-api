@@ -1,0 +1,218 @@
+@startuml
+
+package "iam" {
+
+  package "interfaces" {
+
+    package "rest" {
+
+      class AuthenticationController {
+        +signIn(signInResource) : ResponseEntity<AuthenticatedUserResource>
+        +signUp(signUpResource) : ResponseEntity<UserResource>
+      }
+
+      class UsersController {
+        +getAllUsers() : ResponseEntity<List<UserResource>>
+        +getUserById(userId: Long) : ResponseEntity<UserResource>
+      }
+
+      class RolesController {
+        +getAllRoles() : ResponseEntity<List<RoleResource>>
+      }
+
+      package "resources" {
+        class UserResource {
+          +id: Long
+          +username: String
+          +roles: List<String>
+        }
+
+        class SignInResource {
+          +username: String
+          +password: String
+        }
+
+        class SignUpResource {
+          +username: String
+          +password: String
+          +roles: List<String>
+        }
+
+        class AuthenticatedUserResource {
+          +id: Long
+          +username: String
+          +token: String
+        }
+
+        class RoleResource {
+          +id: Long
+          +name: String
+        }
+      }
+
+      package "transform" {
+        class SignInCommandFromResourceAssembler
+        class SignUpCommandFromResourceAssembler
+        class AuthenticatedUserResourceFromEntityAssembler
+        class UserResourceFromEntityAssembler
+        class RoleResourceFromEntityAssembler
+      }
+    }
+
+    package "acl" {
+      class IamContextFacade {
+        +createUser(username: String, password: String): Long
+        +createUser(username: String, password: String, roleNames: List<String>): Long
+        +fetchUserIdByUsername(username: String): Long
+        +fetchUsernameByUserId(userId: Long): String
+      }
+    }
+  }
+
+  package "application" {
+
+    package "internal" {
+
+      package "commandservices" {
+        class UserCommandServiceImpl {
+          +handle(SignInCommand) : Optional<Pair<User,String>>
+          +handle(SignUpCommand) : Optional<User>
+        }
+
+        class RoleCommandServiceImpl
+      }
+
+      package "queryservices" {
+        class UserQueryServiceImpl {
+          +handle(GetUserByIdQuery) : Optional<User>
+          +handle(GetAllUsersQuery) : List<User>
+        }
+
+        class RoleQueryServiceImpl
+      }
+
+      package "outboundservices" {
+        class HashingService
+        class TokenService
+      }
+    }
+
+    package "acl" {
+      class IamContextFacadeImpl
+    }
+  }
+
+  package "domain" {
+
+    package "model" {
+
+      package "aggregates" {
+        class User <<aggregate>> {
+          -id: Long
+          -username: String
+          -password: String
+          -roles: Set<Role>
+          +addRole(role: Role): User
+        }
+      }
+
+      package "entities" {
+        class Role <<entity>> {
+          -id: Long
+          -name: Roles
+        }
+      }
+
+      package "commands" {
+        class SignInCommand
+        class SignUpCommand
+        class SeedRolesCommand
+      }
+
+      package "queries" {
+        class GetUserByUsernameQuery
+        class GetUserByIdQuery
+        class GetAllUsersQuery
+        class GetAllRolesQuery
+        class GetRoleByNameQuery
+      }
+
+      package "valueobjects" {
+        class Roles
+      }
+    }
+  }
+
+  package "domain.services" {
+
+    class UserCommandService {
+      +handle(SignInCommand)
+      +handle(SignUpCommand)
+    }
+
+    class UserQueryService {
+      +handle(GetAllUsersQuery)
+      +handle(GetUserByIdQuery)
+      +handle(GetUserByUsernameQuery)
+    }
+
+    class RoleCommandService {
+      +handle(SeedRolesCommand)
+    }
+
+    class RoleQueryService {
+      +handle(GetAllRolesQuery)
+      +handle(GetRoleByNameQuery)
+    }
+  }
+
+  package "infrastructure" {
+
+    package "persistence.jpa.repositories" {
+      interface UserRepository
+      interface RoleRepository
+    }
+
+    package "tokens.jwt" {
+      interface BearerTokenService
+      class TokenServiceImpl
+    }
+
+    package "hashing.bcrypt" {
+      interface BCryptHashingService
+      class HashingServiceImpl
+    }
+
+    package "authorization.sfs" {
+      class UserDetailsServiceImpl
+      class UserDetailsImpl
+      class UnauthorizedRequestHandlerEntryPoint
+      class BearerAuthorizationRequestFilter
+    }
+  }
+}
+
+' Relaciones principales
+AuthenticationController --> UserCommandServiceImpl
+UsersController --> UserQueryServiceImpl
+RolesController --> RoleQueryServiceImpl
+
+UserCommandServiceImpl --> UserRepository
+UserCommandServiceImpl --> RoleRepository
+UserCommandServiceImpl --> HashingService
+UserCommandServiceImpl --> TokenService
+
+RoleCommandServiceImpl --> RoleRepository
+
+UserQueryServiceImpl --> UserRepository
+RoleQueryServiceImpl --> RoleRepository
+
+TokenServiceImpl ..|> TokenService
+HashingServiceImpl ..|> HashingService
+
+UserCommandServiceImpl ..|> UserCommandService
+UserQueryServiceImpl ..|> UserQueryService
+RoleCommandServiceImpl ..|> RoleCommandService
+RoleQueryServiceImpl ..|> RoleQueryService
+
+@enduml

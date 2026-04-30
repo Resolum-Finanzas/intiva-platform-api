@@ -1,0 +1,50 @@
+@startuml
+package "vehicle" {
+package "interfaces.acl"{
+interface VehicleContextFacade{}
+}
+package "interfaces.rest"{
+package "resources"{}
+package "transform"{}
+class "vehiclesController"{}
+}
+
+package "infrastructure.jpa.repositories"{
+        interface VehicleRepository {}
+  }
+  package "application.acl" {
+    class VehicleContextFacadeImpl <<implements VehicleContextFacade>>
+  }
+
+  package "application.internal.commandservices" {
+    class VehicleCommandServicesImpl{}
+  }
+
+  package "application.queryservices" {
+    class VehicleQueryServiceImpl{}
+  }
+
+  package "application.outboundservices.acl" {
+    interface ExternalAclOutbound
+  }
+
+  package "domain.model.aggregates" {
+    class Vehicle {
+      +String make
+      +String model
+      +int year
+      + String colors
+      + FuelType fuelType
+     + float kilometersDriven
+    }
+  }
+  package "domain.services"{
+   interface VehicleCommandService{}
+    interface VehicleQueryService{}
+  }
+  package "domain.model.valueobjects" {
+    enum FuelType{
+    GASOLINE,DIESEL,ELECTRIC,HYBRID}
+  }
+}
+@enduml

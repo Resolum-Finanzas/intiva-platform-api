@@ -1,0 +1,55 @@
+@startuml
+package "communication" {
+
+  package "application.acl" {
+    class CommunicationContextFacadeImpl <<implements CommunicationContextFacade>>
+  }
+
+  package "application.internal.commandservices" {
+    class CommunicationCommandServicesImpl
+  }
+
+  package "application.queryservices" {
+    class CommunicationQueryServiceImpl
+  }
+
+  package "application.outboundservices.acl" {
+    interface ExternalAclOutbound
+  }
+
+  package "domain.model.aggregates" {
+    class Notification {
+      +EmailAddress emailAddress
+      +Message message
+      +String recipientName
+     + Long relatedEntityId
+     + NotificationStatus notificationStatus
+
+    }
+  }
+  package "domain.services"{
+   interface NotificationCommandService{}
+    interface NotificationQueryService{}
+  }
+  package "domain.model.valueobjects" {
+    class Message{
+    String htmlContent
+    String subject
+    }
+    class EmailAddress {
+    String emailAddress
+    }
+    class NotificationStatus{
+    PENDING,SENT,FAILED}
+
+  }
+  package "infrastructure.jpa.repositories"{
+
+  }
+  package "infrastructure.email.twilio.services" {
+    class TwilioServiceImpl {}
+      class "configuration"{}
+
+  }
+}
+@enduml

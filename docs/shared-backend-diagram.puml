@@ -1,0 +1,30 @@
+@startuml
+
+
+package "shared" {
+
+  package "interfaces" {
+    package "rest" {
+      class MessageResource {
+        +message: String
+      }
+    }
+  }
+
+  package "domain" {
+    package "model" {
+      abstract class AuditableAbstractAggregateRoot {
+        +createdAt: Date
+        +updatedAt: Date
+      }
+    }
+  }
+
+  package "infrastructure" {
+    package "persistence.jpa.configuration.strategy" {
+      class SnakeCaseWithPluralizedTablePhysicalNamingStrategy
+    }
+  }
+}
+
+@enduml
