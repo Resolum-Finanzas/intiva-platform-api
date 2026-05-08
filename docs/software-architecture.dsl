@@ -68,6 +68,15 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
                     "Handles common infrastructure, implementations and value objects across the contexts." \
                     "Java 21, Spring Boot 3"
             }
+            
+            processingApi = container "Processing API" \
+                "API that fast processes algorithms for the Cloud API" \
+                "Python, FastAPI" \
+                "API" {
+                apiAlgorithms = component "Algorithms" \
+                    "Manages the use of algorithms." \
+                    "Python, FastAPI"
+            }
 
             database = container "Intiva MongoDB Database" \
                 "Document store for all structured domain data including users, residents, visits, and notifications." \
@@ -89,6 +98,7 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
         backendApi     -> database       "Reads from and writes to"                   "MongoDB Wire Protocol"
         backendApi     -> twilio         "Sends notifications via"                    "HTTPS"
         backendApi     -> oauth2         "Validates tokens with"                      "HTTPS/OIDC"
+        backendApi     -> processingApi  "Delegates algorithm processing"             "JSON/HTTPS"
 
         apiIamContext           -> oauth2        "Requests authorization from Google"  "HTTPS"
         apiIamContext           -> apiShared     "Uses shared utilities"
@@ -119,8 +129,12 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
         deploymentEnvironment "Production" {
 
             deploymentNode "Azure App Service" "Cloud platform where the backend service is deployed and executed." "Azure App Service / Docker" {
-                deploymentNode "Intiva Cloud API" "Backend API service executed in Render." "Azure App Service / Docker" {
+                deploymentNode "Intiva Cloud API" "Backend API service executed in cloud." "Azure App Service / Docker" {
                     containerInstance backendApi
+                }
+                
+                deploymentNode "Intiva Processing API" "Backend API service for algorithm executing." "Azure App Service / Docker" {
+                    containerInstance processingApi
                 }
             }
 
@@ -175,6 +189,12 @@ workspace "Intiva" "Intiva Platform — Vehicle Loans Simulator" {
             include *
             autoLayout lr
             title "Intiva Platform — Software Architecture Cloud API Component Diagram"
+        }
+        
+        component processingApi "ProcessingAPIComponent" {
+            include *
+            autoLayout lr
+            title "Intiva Platform — Software Architecture Processing API Component Diagram"
         }
 
         styles {
